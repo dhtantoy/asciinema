@@ -26,7 +26,7 @@ struct NotFoundResponse {
 
 pub fn get_auth_url(config: &Config) -> Result<Url> {
     let mut url = config.get_server_url()?;
-    url.set_path(&format!("connect/{}", config.get_install_id()?));
+    url.set_path(&format!("{}/connect/{}", url.path(), config.get_install_id()?));
 
     Ok(url)
 }
@@ -48,7 +48,7 @@ pub fn upload_asciicast(path: &str, config: &Config) -> Result<UploadAsciicastRe
 fn upload_request(server_url: &Url, path: &str, install_id: String) -> Result<RequestBuilder> {
     let client = Client::new();
     let mut url = server_url.clone();
-    url.set_path("api/asciicasts");
+    url.set_path(&format!("{}/api/asciicasts", url.path()));
     let form = Form::new().file("asciicast", path)?;
 
     Ok(client
@@ -93,10 +93,10 @@ fn user_stream_request(server_url: &Url, stream_id: String, install_id: String) 
     let mut url = server_url.clone();
 
     let builder = if stream_id.is_empty() {
-        url.set_path("api/streams");
+        url.set_path(&format!("{}/api/streams", url.path()));
         client.post(url)
     } else {
-        url.set_path(&format!("api/user/streams/{stream_id}"));
+        url.set_path(&format!("{}/api/user/streams/{stream_id}", url.path()));
         client.get(url)
     };
 
