@@ -2,7 +2,7 @@
 // which is an application level protocol built on top of WebSocket binary messages,
 // used by asciinema CLI, asciinema player and asciinema server.
 
-// TODO document the protocol
+// TODO document the protocol when it's final
 
 use super::session;
 use anyhow::Result;
@@ -11,13 +11,13 @@ use std::future;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
-static HEADER: &str = "ALiS\x01";
+static MAGIC_STRING: &str = "ALiS\x01";
 static SECOND: f64 = 1_000_000.0;
 
 pub async fn stream(
     clients_tx: &mpsc::Sender<session::Client>,
 ) -> Result<impl Stream<Item = Result<Vec<u8>, BroadcastStreamRecvError>>> {
-    let header = stream::once(future::ready(Ok(HEADER.into())));
+    let header = stream::once(future::ready(Ok(MAGIC_STRING.into())));
     let events = session::stream(clients_tx).await?.map_ok(encode_event);
 
     Ok(header.chain(events))
@@ -42,7 +42,7 @@ fn encode_event(event: session::Event) -> Vec<u8> {
 
             match theme {
                 Some(theme) => {
-                    msg.push(1);
+                    msg.push(16);
                     msg.push(theme.fg.r);
                     msg.push(theme.fg.g);
                     msg.push(theme.fg.b);
@@ -68,12 +68,25 @@ fn encode_event(event: session::Event) -> Vec<u8> {
             msg
         }
 
-        Stdout(time, text) => {
+        Output(time, text) => {
             let time_bytes = ((time as f64 / SECOND) as f32).to_le_bytes();
             let text_len = text.len() as u32;
             let text_len_bytes = text_len.to_le_bytes();
 
             let mut msg = vec![b'o']; // 1 byte
+            msg.extend_from_slice(&time_bytes); // 4 bytes
+            msg.extend_from_slice(&text_len_bytes); // 4 bytes
+            msg.extend_from_slice(text.as_bytes()); // text_len bytes
+
+            msg
+        }
+
+        Input(time, text) => {
+            let time_bytes = ((time as f64 / SECOND) as f32).to_le_bytes();
+            let text_len = text.len() as u32;
+            let text_len_bytes = text_len.to_le_bytes();
+
+            let mut msg = vec![b'i']; // 1 byte
             msg.extend_from_slice(&time_bytes); // 4 bytes
             msg.extend_from_slice(&text_len_bytes); // 4 bytes
             msg.extend_from_slice(text.as_bytes()); // text_len bytes
@@ -91,6 +104,19 @@ fn encode_event(event: session::Event) -> Vec<u8> {
             msg.extend_from_slice(&time_bytes); // 4 bytes
             msg.extend_from_slice(&cols_bytes); // 2 bytes
             msg.extend_from_slice(&rows_bytes); // 2 bytes
+
+            msg
+        }
+
+        Marker(time, text) => {
+            let time_bytes = ((time as f64 / SECOND) as f32).to_le_bytes();
+            let text_len = text.len() as u32;
+            let text_len_bytes = text_len.to_le_bytes();
+
+            let mut msg = vec![b'm']; // 1 byte
+            msg.extend_from_slice(&time_bytes); // 4 bytes
+            msg.extend_from_slice(&text_len_bytes); // 4 bytes
+            msg.extend_from_slice(text.as_bytes()); // text_len bytes
 
             msg
         }
